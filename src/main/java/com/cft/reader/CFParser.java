@@ -82,7 +82,7 @@ public class CFParser {
 
 	public static void main(String[] args) {
 		CFParser parser = new CFParser();
-		NodeGroup group = parser.parser("C:/eclipse/workspace/CFProject/cftemplate.json");
+		NodeGroup group = parser.parser(CFParser.class.getClassLoader().getResource("sample/cftemplate.json").getFile());
 		group.getDependencies().forEach((k,v)->{
 			System.out.println("Node: "+k);
 			System.out.println("Dependend On: "+v+"\n");
