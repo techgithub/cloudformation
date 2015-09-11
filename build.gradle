@@ -1,23 +1,48 @@
 buildscript {
     repositories {
         mavenCentral()
+        maven
+        {
+ 			url "https://plugins.gradle.org/m2/"
+        }
+       
     }
     dependencies {
-        classpath("org.springframework.boot:spring-boot-gradle-plugin:1.2.5.RELEASE")
+        classpath 'org.springframework.boot:spring-boot-gradle-plugin:1.2.5.RELEASE'
+         classpath "com.moowork.gradle:gradle-node-plugin:0.10"
+          classpath "com.bertramlabs.plugins:asset-pipeline-gradle:2.4.3"
+
     }
 }
+
 
 ext {
 springBootVersion = "1.2.5.RELEASE"
 springVersion = "4.2.1.RELEASE"
 sl4jVersion = "1.7.12"
+cacheDir = gradle.getGradleUserHomeDir() as String ?: "${System.getProperty("user.home")}/.cache/gradle"
+new File(cacheDir).mkdirs()
+gradleWrapperVersion = "2.3"
+uiPlugins = "src/main/resources/static/assets/bower_components"
 }
+
+
 
 apply plugin: 'java'
 apply plugin: 'eclipse'
 apply plugin: 'idea'
 apply plugin: 'spring-boot'
 apply plugin: 'war'
+apply plugin: 'com.moowork.node'
+apply plugin: 'com.bertramlabs.asset-pipeline'
+
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
+
+
+task wrapper(type: Wrapper) {
+    gradleVersion = gradleWrapperVersion
+}
 
 
 war {
@@ -30,8 +55,17 @@ repositories {
     jcenter()
 }
 
-sourceCompatibility = 1.8
-targetCompatibility = 1.8
+
+assets {
+    minifyJs = true
+    minifyCss = true
+}
+
+node {
+    version = '0.12.2'
+    npmVersion = '2.7.5'
+    download = true
+}
 
 dependencies {
    
@@ -64,6 +98,50 @@ dependencies {
     testCompile("junit:junit")
 }
 
-task wrapper(type: Wrapper) {
-    gradleVersion = '2.3'
+task npmCacheConfig(type: NpmTask) {
+    description = "Configure the NPM cache"
+    def npmCacheDir = "${cacheDir}/caches/npm"
+    outputs.files file(npmCacheDir)
+    args = [ 'config', 'set', 'cache', npmCacheDir ]
 }
+
+task npmPackages(type: NpmTask, dependsOn: npmCacheConfig) {
+    description = "Install Node.js packages"
+    args = [ 'install' ]
+    inputs.files file('package.json')
+    outputs.files file('node_modules')
+}
+
+task bowerInstall(type: NodeTask) {
+    script = file('node_modules/bower/bin/bower')
+    args = ["--config.storage.cache=${cacheDir}/caches/bower/cache",
+            "--config.storage.packages=${cacheDir}/caches/bower/packages",
+            "--config.storage.registry=${cacheDir}/caches/bower/registry",
+            'install']
+    inputs.files file('bower.json')
+    outputs.files file('bower_components')
+    dependsOn npmPackages
+}
+
+task bowerSyncJavascript(type: Sync) {
+    from 'bower_components'
+    into "$uiPlugins"
+    dependsOn bowerInstall
+}
+
+task bowerSyncStylesheets(type: Sync) {
+    from 'bower_components'
+   into "$uiPlugins"
+    dependsOn bowerInstall
+    dependsOn bowerInstall
+}
+
+task bowerPackages() {
+    dependsOn bowerSyncJavascript, bowerSyncStylesheets
+}
+
+processResources.dependsOn bowerPackages
+assetCompile.dependsOn bowerPackages
+
+clean.delete << file('node_modules')
+clean.delete << file('bower_components')
